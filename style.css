@@ -54,6 +54,7 @@ h1 { margin: 0; font-size: 44px; letter-spacing: .06em; color: #e76f00; }
 .tool, .act { flex: 1; max-width: 96px; min-height: 64px; border-radius: 18px; background: #fff; font-size: 13px; font-weight: bold;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-shadow: 0 4px 0 #e2c98a; }
 .tool span, .act span { font-size: 28px; line-height: 1; }
+.hint { margin: 0; font-size: 13px; line-height: 1.7; text-align: center; opacity: .75; }
 .tool.on { background: #ffd166; box-shadow: 0 4px 0 #d9a21b; outline: 3px solid #ff8c1a; }
 .act { background: #ffe9f0; box-shadow: 0 4px 0 #e6a9bf; }
 .act.on { background: #ffc2d8; outline: 3px solid #ff5c8a; }

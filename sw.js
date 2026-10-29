@@ -1,4 +1,4 @@
-const CACHE_NAME = 'kaoasobi-v2';
+const CACHE_NAME = 'kaoasobi-v3';
 const PRECACHE = ['./index.html', './app.js', './style.css', './manifest.json', './icons/icon.svg'];
 
 self.addEventListener('install', (e) => {

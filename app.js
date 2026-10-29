@@ -1,15 +1,12 @@
 'use strict';
 /* かおあそび — じぶんの顔写真をバネのメッシュ変形で遊ぶ。写真は端末内のみ（localStorage）。
-   調整は下の TOOLS / SLEEP_MS を触る。 */
+   調整は SLEEP_MS と、step() の係数（A/S/sig）・STILL_R を触る。 */
 
 const SIZE = 720;                       // 写真テクスチャの一辺(px)
 const N = 36;                           // メッシュ分割数
 const SLEEP_MS = 3 * 60 * 1000;         // あそび続けて眠るまで
 const WAKE_WAIT = 15;                   // 眠ってから「おきる」が押せるまで(秒)
 const LS = { last: 'kaoasobi_last', sleep: 'kaoasobi_sleep', sound: 'kaoasobi_sound' };
-
-// ツールごとの影響範囲(σ)
-const TOOLS = { pull: { sigma: 0.17 }, bulge: { sigma: 0.15 }, pinch: { sigma: 0.15 }, swirl: { sigma: 0.2 } };
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -201,8 +198,9 @@ window.addEventListener('resize', () => { if (playing) layout(); });
 window.addEventListener('orientationchange', () => setTimeout(() => { if (playing) layout(); }, 200));
 
 /* ---------- あそびの状態 ---------- */
-let playing = false, last = 0, tool = 'pull', big = false, starUntil = 0, sleeping = false, sleepAt = 0, playMs = 0;
-let ptr = null;                         // {id,x0,y0,x,y,t}
+let playing = false, last = 0, big = false, starUntil = 0, sleeping = false, sleepAt = 0, playMs = 0;
+const ptrs = new Map();                 // 触れている指 id→{x,y}
+let ptr = null;                         // 操作状態 {mode:'one'|'two', ...}
 const parts = [];                       // 飛び散る絵文字
 let baa = null;                         // いないいないばあの進行 {t0, fired}
 
@@ -211,7 +209,7 @@ function startPlay(save) {
   if (save) saveLast();
   uploadTexture();
   disp.fill(0); vel.fill(0);
-  big = false; starUntil = 0; sleeping = false; playMs = 0; ptr = null; baa = null; parts.length = 0;
+  big = false; starUntil = 0; sleeping = false; playMs = 0; ptr = null; ptrs.clear(); baa = null; parts.length = 0;
   $('actMush').classList.remove('on'); $('sleep').hidden = true;
   show('play');
 }
@@ -231,29 +229,69 @@ function burst(ch, n, cx, cy, size) {
   }
 }
 
-/* ---------- ポインタ ---------- */
+/* ---------- ポインタ（触り方で操作が自動で決まる） ----------
+   指1本：なぞる＝つまむ／押しっぱなし＝ふくらむ／円をかく＝ぐるぐる
+   指2本：近づける＝ぎゅー／広げる＝ふくらむ／ひねる＝ぐるぐる */
+const STILL_R = 0.045;                  // これ以上動いたら「なぞる」
 function pt(e) {
   const r = glc.getBoundingClientRect();
   return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
 }
+function startOne(id, x, y) {
+  ptr = { mode: 'one', id, x0: x, y0: y, x, y, t: 0, still: true, turn: 0, lx: x, ly: y, dvx: 0, dvy: 0, cx: x, cy: y, swirling: false };
+}
+function twoPts() {
+  const it = ptrs.values(), a = it.next().value, b = it.next().value;
+  return [a, b];
+}
+function startTwo() {
+  const [a, b] = twoPts();
+  const ang = Math.atan2(b.y - a.y, b.x - a.x);
+  ptr = { mode: 'two', t: 0, d0: Math.max(0.06, Math.hypot(b.x - a.x, b.y - a.y)), mx0: (a.x + b.x) / 2, my0: (a.y + b.y) / 2,
+    mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, d: 0, aPrev: ang, aAcc: 0 };
+  ptr.d = ptr.d0;
+}
 glc.addEventListener('pointerdown', (e) => {
-  if (sleeping || ptr) return;
+  if (sleeping || ptrs.size >= 2) return;
   const [x, y] = pt(e);
-  ptr = { id: e.pointerId, x0: x, y0: y, x, y, t: 0 };
+  ptrs.set(e.pointerId, { x, y });
   try { glc.setPointerCapture(e.pointerId); } catch (er) { /* noop */ }
-  impulse(x, y, 0.14, -4.5);            // ぷにっと凹む
-  sfx.poke();
+  if (ptrs.size === 1) { startOne(e.pointerId, x, y); impulse(x, y, 0.14, -4.5); sfx.poke(); }   // ぷにっと凹む
+  else startTwo();
 });
 glc.addEventListener('pointermove', (e) => {
-  if (!ptr || e.pointerId !== ptr.id) return;
-  [ptr.x, ptr.y] = pt(e);
+  const q = ptrs.get(e.pointerId); if (!q || !ptr) return;
+  [q.x, q.y] = pt(e);
+  if (ptr.mode === 'two') {
+    const [a, b] = twoPts();
+    ptr.mx = (a.x + b.x) / 2; ptr.my = (a.y + b.y) / 2; ptr.d = Math.hypot(b.x - a.x, b.y - a.y);
+    const ang = Math.atan2(b.y - a.y, b.x - a.x);
+    let da = ang - ptr.aPrev; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+    ptr.aAcc += da; ptr.aPrev = ang;
+    return;
+  }
+  ptr.x = q.x; ptr.y = q.y;
+  if (Math.hypot(ptr.x - ptr.x0, ptr.y - ptr.y0) > STILL_R) ptr.still = false;
+  const dx = ptr.x - ptr.lx, dy = ptr.y - ptr.ly;
+  if (Math.hypot(dx, dy) > 0.012) {                     // 進む向きの変化を足し込む＝円をかいているか
+    if (ptr.dvx || ptr.dvy) ptr.turn += Math.atan2(ptr.dvx * dy - ptr.dvy * dx, ptr.dvx * dx + ptr.dvy * dy);
+    ptr.dvx = dx; ptr.dvy = dy; ptr.lx = ptr.x; ptr.ly = ptr.y;
+  }
+  ptr.turn *= 0.992;
+  ptr.cx += (ptr.x - ptr.cx) * 0.1; ptr.cy += (ptr.y - ptr.cy) * 0.1;
+  if (!ptr.swirling && Math.abs(ptr.turn) > 2.4) ptr.swirling = true;
+  else if (ptr.swirling && Math.abs(ptr.turn) < 0.8) ptr.swirling = false;
 });
 function release(e) {
-  if (!ptr || e.pointerId !== ptr.id) return;
-  const moved = Math.hypot(ptr.x - ptr.x0, ptr.y - ptr.y0);
-  if (tool === 'pull' && moved > 0.08) sfx.boing();
-  else if (ptr.t > 0.4) sfx.boing();
-  ptr = null;
+  if (!ptrs.delete(e.pointerId) || !ptr) return;
+  if (ptrs.size === 0) {
+    const moved = ptr.mode === 'one' ? Math.hypot(ptr.x - ptr.x0, ptr.y - ptr.y0) : 0;
+    if (moved > 0.08 || ptr.t > 0.4) sfx.boing();
+    ptr = null;
+  } else {                                              // 2本→1本：残った指で改めて始める
+    const [id, q] = ptrs.entries().next().value;
+    startOne(id, q.x, q.y);
+  }
 }
 glc.addEventListener('pointerup', release);
 glc.addEventListener('pointercancel', release);
@@ -264,29 +302,32 @@ function step(dt, now) {
   const held = !!ptr && !sleeping;
   if (held) ptr.t += dt;
   const k = held ? 170 : 80, c = held ? 20 : 3.2;
-  let sig = 0, cx = 0, cy = 0, a = 0, px = 0, py = 0;
-  if (held) {
-    sig = TOOLS[tool].sigma;
-    if (tool === 'pull') { cx = ptr.x0; cy = ptr.y0; px = ptr.x - ptr.x0; py = ptr.y - ptr.y0; }
-    else { cx = ptr.x; cy = ptr.y; }
-    if (tool === 'bulge') a = Math.min(1.1, 0.4 + ptr.t * 0.8);
-    if (tool === 'pinch') a = Math.min(0.8, 0.3 + ptr.t * 0.6);
-    if (tool === 'swirl') a = Math.min(5, 1 + ptr.t * 3);
+  // 場のパラメータ：fx,fy=引っ張り量／A=ふくらみ(+)・ぎゅー(-)／S=ねじれ角
+  let fx = 0, fy = 0, A = 0, S = 0, cx = 0, cy = 0, sig = 0.17;
+  if (held && ptr.mode === 'one') {
+    cx = ptr.x0; cy = ptr.y0;
+    if (ptr.swirling) { cx = ptr.cx; cy = ptr.cy; S = Math.max(-5, Math.min(5, ptr.turn * 0.7)); sig = 0.2; }
+    else if (!ptr.still) { fx = ptr.x - ptr.x0; fy = ptr.y - ptr.y0; }
+    else if (ptr.t > 0.2) { A = Math.min(1.1, 0.3 + (ptr.t - 0.2) * 0.9); sig = 0.15; }
+  } else if (held && ptr.mode === 'two') {
+    cx = ptr.mx; cy = ptr.my; sig = Math.max(0.14, Math.min(0.3, ptr.d0 * 0.9));
+    fx = ptr.mx - ptr.mx0; fy = ptr.my - ptr.my0;
+    A = Math.max(-0.8, Math.min(1.1, (ptr.d / ptr.d0 - 1) * 1.8));
+    S = Math.max(-5, Math.min(5, ptr.aAcc * 1.5));
   }
+  const active = held && (fx || fy || A || S);
   const s2 = 2 * sig * sig, cut = 9 * sig * sig;
   for (let i = 0; i < V; i++) {
     const rx = rest[2 * i], ry = rest[2 * i + 1];
     let tx = 0, ty = 0;
     if (big) { tx = (rx - 0.5) * 0.3; ty = (ry - 0.5) * 0.3; }
-    if (held) {
+    if (active) {
       const dx = rx - cx, dy = ry - cy, r2 = dx * dx + dy * dy;
       if (r2 < cut) {
         const f = Math.exp(-r2 / s2);
-        if (tool === 'pull') { tx += px * f; ty += py * f; }
-        else if (tool === 'bulge') { tx += dx * a * f; ty += dy * a * f; }
-        else if (tool === 'pinch') { tx -= dx * a * f; ty -= dy * a * f; }
-        else {
-          const th = a * f, co = Math.cos(th), si = Math.sin(th);
+        tx += fx * f + dx * A * f; ty += fy * f + dy * A * f;
+        if (S) {
+          const th = S * f, co = Math.cos(th), si = Math.sin(th);
           tx += dx * co - dy * si - dx; ty += dx * si + dy * co - dy;
         }
       }
@@ -382,15 +423,10 @@ $('actBaa').addEventListener('click', () => {
   if (baa || sleeping) return;
   baa = { t0: performance.now(), fired: false }; sfx.hands();
 });
-document.querySelectorAll('.tool').forEach((b) => b.addEventListener('click', () => {
-  tool = b.dataset.tool;
-  document.querySelectorAll('.tool').forEach((x) => x.classList.toggle('on', x === b));
-  sfx.poke();
-}));
 
 /* ---------- おやすみ ---------- */
 function fallAsleep(now) {
-  sleeping = true; sleepAt = now; ptr = null; baa = null;
+  sleeping = true; sleepAt = now; ptr = null; ptrs.clear(); baa = null;
   $('sleep').hidden = false; $('wake').disabled = true;
   $('wake').textContent = 'おきる (' + WAKE_WAIT + ')';
 }
