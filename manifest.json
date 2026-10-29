@@ -1,6 +1,6 @@
 {
-  "name": "かおあそび",
-  "short_name": "かおあそび",
+  "name": "かお父さん",
+  "short_name": "かお父さん",
   "description": "じぶんの かおを しゃしんに とって、つついて ひっぱって あそぼう。2〜5さいむけ",
   "start_url": "./index.html",
   "scope": "./",
