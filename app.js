@@ -6,7 +6,8 @@ const SIZE = 720;                       // 写真テクスチャの一辺(px)
 const N = 36;                           // メッシュ分割数
 const SLEEP_MS = 3 * 60 * 1000;         // あそび続けて眠るまで
 const WAKE_WAIT = 15;                   // 眠ってから「おきる」が押せるまで(秒)
-const LS = { last: 'kaoasobi_last', sleep: 'kaoasobi_sleep', sound: 'kaoasobi_sound' };
+const FS = 0.7;                         // 顔の表示倍率（残りは飛ばして遊ぶ余白）
+const LS = { last: 'kaoasobi_last', sleep: 'kaoasobi_sleep', sound: 'kaoasobi_sound', mask: 'kaoasobi_mask' };
 
 const $ = (id) => document.getElementById(id);
 const store = {
@@ -16,6 +17,7 @@ const store = {
 };
 let soundOn = store.get(LS.sound, '1') === '1';
 let sleepOn = store.get(LS.sleep, '1') === '1';
+let maskOn = store.get(LS.mask, '1') === '1';
 
 /* ---------- 画面切替・小物 ---------- */
 function show(id) {
@@ -53,11 +55,32 @@ const sfx = {
   star() { [1046, 1318, 1568, 2093].forEach((f, i) => tone(f, f * 1.01, 0.18, 'sine', 0.1, i * 0.09)); },
   baa() { [523, 659, 784, 1046].forEach((f, i) => tone(f, f * 1.01, 0.16, 'triangle', 0.16, i * 0.08)); },
   hands() { tone(300, 500, 0.3, 'sine', 0.08); },
+  whoosh() { tone(180, 900, 0.22, 'sawtooth', 0.05); },
 };
 
 /* ---------- 写真の取り込み ---------- */
-const photoCanvas = document.createElement('canvas');
+const photoCanvas = document.createElement('canvas');   // 元の写真（正方形）
 photoCanvas.width = photoCanvas.height = SIZE;
+const texCanvas = document.createElement('canvas');     // GPUへ送る絵（枠の外を白くしたもの）
+texCanvas.width = texCanvas.height = SIZE;
+let maskCanvas = null;
+function getMask() {                    // 撮影ガイドの楕円（幅56%×高さ76%）の外側を白、縁はぼかす
+  if (maskCanvas) return maskCanvas;
+  const c = document.createElement('canvas'); c.width = c.height = SIZE;
+  const g = c.getContext('2d');
+  g.fillStyle = '#fff'; g.fillRect(0, 0, SIZE, SIZE);
+  g.globalCompositeOperation = 'destination-out';
+  g.translate(SIZE / 2, SIZE / 2); g.scale(0.28 * SIZE, 0.38 * SIZE);
+  const gr = g.createRadialGradient(0, 0, 0, 0, 0, 1);
+  gr.addColorStop(0, 'rgba(0,0,0,1)'); gr.addColorStop(0.93, 'rgba(0,0,0,1)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+  g.fillStyle = gr; g.fillRect(-1, -1, 2, 2);
+  return (maskCanvas = c);
+}
+function buildTex() {
+  const g = texCanvas.getContext('2d');
+  g.drawImage(photoCanvas, 0, 0);
+  if (maskOn) g.drawImage(getMask(), 0, 0);
+}
 
 let stream = null, facing = 'user';
 function stopCam() {
@@ -172,7 +195,7 @@ function initGL() {
   gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
   gl.uniform1i(gl.getUniformLocation(prog, 'uTex'), 0);
   uTint = gl.getUniformLocation(prog, 'uTint');
-  gl.clearColor(1, 0.965, 0.878, 1);
+  gl.clearColor(1, 1, 1, 1);
   return true;
 }
 const glOK = initGL();
@@ -180,7 +203,8 @@ const glOK = initGL();
 function uploadTexture() {
   gl.bindTexture(gl.TEXTURE_2D, tex);
   gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
-  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, photoCanvas);
+  buildTex();
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, texCanvas);
 }
 
 /* ---------- レイアウト ---------- */
@@ -200,6 +224,7 @@ window.addEventListener('orientationchange', () => setTimeout(() => { if (playin
 /* ---------- あそびの状態 ---------- */
 let playing = false, last = 0, big = false, starUntil = 0, sleeping = false, sleepAt = 0, playMs = 0;
 const ptrs = new Map();                 // 触れている指 id→{x,y}
+let ox = 0, oy = 0, vx = 0, vy = 0, idle = 0;   // 顔ごとの位置ずれ・速度（はじいて飛ばす）
 let ptr = null;                         // 操作状態 {mode:'one'|'two', ...}
 const parts = [];                       // 飛び散る絵文字
 let baa = null;                         // いないいないばあの進行 {t0, fired}
@@ -210,6 +235,7 @@ function startPlay(save) {
   uploadTexture();
   disp.fill(0); vel.fill(0);
   big = false; starUntil = 0; sleeping = false; playMs = 0; ptr = null; ptrs.clear(); baa = null; parts.length = 0;
+  ox = oy = vx = vy = idle = 0;
   $('actMush').classList.remove('on'); $('sleep').hidden = true;
   show('play');
 }
@@ -232,13 +258,16 @@ function burst(ch, n, cx, cy, size) {
 /* ---------- ポインタ（触り方で操作が自動で決まる） ----------
    指1本：なぞる＝つまむ／押しっぱなし＝ふくらむ／円をかく＝ぐるぐる
    指2本：近づける＝ぎゅー／広げる＝ふくらむ／ひねる＝ぐるぐる */
-const STILL_R = 0.045;                  // これ以上動いたら「なぞる」
+const STILL_R = 0.045;
+const FLICK_MIN = 1.0, FLICK_MAX = 3.2;   // はじきの最低速度／最高速度（画面の幅/秒）                  // これ以上動いたら「なぞる」
 function pt(e) {
   const r = glc.getBoundingClientRect();
-  return [Math.min(1, Math.max(0, (e.clientX - r.left) / r.width)), Math.min(1, Math.max(0, (e.clientY - r.top) / r.height))];
+  const sx = (e.clientX - r.left) / r.width, sy = (e.clientY - r.top) / r.height;
+  const cl = (v) => Math.min(1.4, Math.max(-0.4, v));
+  return [cl((sx - ox - 0.5) / FS + 0.5), cl((sy - oy - 0.5) / FS + 0.5)];   // 顔（メッシュ）側の座標へ
 }
 function startOne(id, x, y) {
-  ptr = { mode: 'one', id, x0: x, y0: y, x, y, t: 0, still: true, turn: 0, lx: x, ly: y, dvx: 0, dvy: 0, cx: x, cy: y, swirling: false };
+  ptr = { mode: 'one', id, x0: x, y0: y, x, y, t: 0, still: true, turn: 0, lx: x, ly: y, dvx: 0, dvy: 0, px: x, py: y, pt: performance.now(), vx: 0, vy: 0, cx: x, cy: y, swirling: false };
 }
 function twoPts() {
   const it = ptrs.values(), a = it.next().value, b = it.next().value;
@@ -255,6 +284,7 @@ glc.addEventListener('pointerdown', (e) => {
   if (sleeping || ptrs.size >= 2) return;
   const [x, y] = pt(e);
   ptrs.set(e.pointerId, { x, y });
+  vx = vy = 0; idle = 0;                // 飛んでいる顔をつかまえる
   try { glc.setPointerCapture(e.pointerId); } catch (er) { /* noop */ }
   if (ptrs.size === 1) { startOne(e.pointerId, x, y); impulse(x, y, 0.14, -4.5); sfx.poke(); }   // ぷにっと凹む
   else startTwo();
@@ -269,6 +299,13 @@ glc.addEventListener('pointermove', (e) => {
     let da = ang - ptr.aPrev; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
     ptr.aAcc += da; ptr.aPrev = ang;
     return;
+  }
+  const now = performance.now(), dtm = now - ptr.pt;
+  if (dtm > 0) {                                        // 指の速さ（画面の幅/秒）
+    const k = 0.4;
+    ptr.vx = ptr.vx * (1 - k) + ((q.x - ptr.px) * FS / dtm * 1000) * k;
+    ptr.vy = ptr.vy * (1 - k) + ((q.y - ptr.py) * FS / dtm * 1000) * k;
+    ptr.px = q.x; ptr.py = q.y; ptr.pt = now;
   }
   ptr.x = q.x; ptr.y = q.y;
   if (Math.hypot(ptr.x - ptr.x0, ptr.y - ptr.y0) > STILL_R) ptr.still = false;
@@ -286,7 +323,12 @@ function release(e) {
   if (!ptrs.delete(e.pointerId) || !ptr) return;
   if (ptrs.size === 0) {
     const moved = ptr.mode === 'one' ? Math.hypot(ptr.x - ptr.x0, ptr.y - ptr.y0) : 0;
-    if (moved > 0.08 || ptr.t > 0.4) sfx.boing();
+    const fresh = performance.now() - ptr.pt < 90;      // 離す直前まで動いていたか
+    const sp = ptr.mode === 'one' && fresh ? Math.hypot(ptr.vx, ptr.vy) : 0;
+    if (ptr.mode === 'one' && !ptr.still && !ptr.swirling && sp > FLICK_MIN) {   // はじいた！
+      const m = Math.min(sp, FLICK_MAX) / sp;
+      vx = ptr.vx * m * 0.9; vy = ptr.vy * m * 0.9; idle = 0; sfx.whoosh();
+    } else if (moved > 0.08 || ptr.t > 0.4) sfx.boing();
     ptr = null;
   } else {                                              // 2本→1本：残った指で改めて始める
     const [id, q] = ptrs.entries().next().value;
@@ -340,8 +382,37 @@ function step(dt, now) {
   }
 }
 
+function squash(nx, ny, speed) {          // 壁にぶつかった側をぐにゃっとつぶす
+  for (let i = 0; i < V; i++) {
+    const t = ((rest[2 * i] - 0.5) * nx + (rest[2 * i + 1] - 0.5) * ny) * 2;
+    if (t > 0) { vel[2 * i] -= nx * speed * 0.5 * t; vel[2 * i + 1] -= ny * speed * 0.5 * t; }
+  }
+}
+function moveBody(dt) {
+  if (ptr || sleeping) { if (ptr) { vx = vy = 0; } idle = 0; return; }
+  const hx = maskOn ? 0.28 : 0.5, hy = maskOn ? 0.38 : 0.5;
+  const BX = Math.max(0.04, 0.5 - hx * FS - 0.01), BY = Math.max(0.04, 0.5 - hy * FS - 0.01);
+  ox += vx * dt; oy += vy * dt;
+  const hit = (nx, ny, sp) => {
+    if (sp > 0.6) { sfx.boing(); burst('⭐', 3, 0.5 + ox + nx * 0.2, 0.5 + oy + ny * 0.2, 0.07); } else sfx.poke();
+    squash(nx, ny, sp);
+  };
+  if (ox > BX) { ox = BX; if (vx > 0) { hit(1, 0, vx); vx = -vx * 0.72; } }
+  if (ox < -BX) { ox = -BX; if (vx < 0) { hit(-1, 0, -vx); vx = -vx * 0.72; } }
+  if (oy > BY) { oy = BY; if (vy > 0) { hit(0, 1, vy); vy = -vy * 0.72; } }
+  if (oy < -BY) { oy = -BY; if (vy < 0) { hit(0, -1, -vy); vy = -vy * 0.72; } }
+  const f = Math.exp(-0.8 * dt); vx *= f; vy *= f;
+  if (Math.hypot(vx, vy) < 0.05) {
+    vx = vy = 0; idle += dt;
+    if (idle > 2) { const u = Math.min(1, dt * 2); ox -= ox * u; oy -= oy * u; }   // 止まったら中央へ戻る
+  } else idle = 0;
+}
 function draw(now) {
-  for (let i = 0; i < V * 2; i++) pos[i] = rest[i] + disp[i];
+  for (let i = 0; i < V; i++) {
+    const j = 2 * i;
+    pos[j] = 0.5 + (rest[j] + disp[j] - 0.5) * FS + ox;
+    pos[j + 1] = 0.5 + (rest[j + 1] + disp[j + 1] - 0.5) * FS + oy;
+  }
   gl.bindBuffer(gl.ARRAY_BUFFER, posBuf); gl.bufferSubData(gl.ARRAY_BUFFER, 0, pos);
   let r = 1, g = 1, b = 1;
   if (now < starUntil) {                // きらきら：虹色にゆれる
@@ -383,8 +454,8 @@ function drawOverlay(now, dt) {
     }
     if (t < 2.0) {
       octx.font = Math.round(W * 0.55) + 'px ' + EMOJI;
-      octx.save(); octx.translate((0.5 - off) * W, 0.5 * W); octx.rotate(0.15); octx.fillText('✋', 0, 0); octx.restore();
-      octx.save(); octx.translate((0.5 + off) * W, 0.5 * W); octx.rotate(-0.15); octx.scale(-1, 1); octx.fillText('✋', 0, 0); octx.restore();
+      octx.save(); octx.translate((0.5 + ox - off) * W, (0.5 + oy) * W); octx.rotate(0.15); octx.fillText('✋', 0, 0); octx.restore();
+      octx.save(); octx.translate((0.5 + ox + off) * W, (0.5 + oy) * W); octx.rotate(-0.15); octx.scale(-1, 1); octx.fillText('✋', 0, 0); octx.restore();
     }
     if (t >= 1.6 && t < 2.8) {
       const s = 0.6 + 0.4 * ease((t - 1.6) / 0.25);
@@ -471,12 +542,13 @@ $('shutter').addEventListener('click', shoot);
 $('back').addEventListener('click', () => { refreshHome(); show('home'); });
 
 function openSettings() {
-  $('optSleep').checked = sleepOn; $('optSound').checked = soundOn; $('settings').hidden = false;
+  $('optMask').checked = maskOn; $('optSleep').checked = sleepOn; $('optSound').checked = soundOn; $('settings').hidden = false;
 }
 $('gearHome').addEventListener('click', openSettings);
 $('gearPlay').addEventListener('click', openSettings);
 $('closeSet').addEventListener('click', () => { $('settings').hidden = true; });
 $('optSleep').addEventListener('change', (e) => { sleepOn = e.target.checked; store.set(LS.sleep, sleepOn ? '1' : '0'); playMs = 0; });
+$('optMask').addEventListener('change', (e) => { maskOn = e.target.checked; store.set(LS.mask, maskOn ? '1' : '0'); });
 $('optSound').addEventListener('change', (e) => { soundOn = e.target.checked; store.set(LS.sound, soundOn ? '1' : '0'); });
 $('delPhoto').addEventListener('click', () => { store.del(LS.last); refreshHome(); toast('けしました'); });
 
@@ -486,7 +558,7 @@ function frame(now) {
   if (!playing || !glOK) return;
   const dt = Math.min((now - last) / 1000, 1 / 30); last = now;
   if (!$('settings').hidden) return;
-  step(dt, now); draw(now); drawOverlay(now, dt);
+  step(dt, now); moveBody(dt); draw(now); drawOverlay(now, dt);
   if (sleepOn && !sleeping) { playMs += dt * 1000; if (playMs >= SLEEP_MS) fallAsleep(now); }
   sleepTick(now);
 }

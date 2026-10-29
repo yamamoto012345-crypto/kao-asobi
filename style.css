@@ -41,8 +41,8 @@ h1 { margin: 0; font-size: 44px; letter-spacing: .06em; color: #e76f00; }
 #cam .sec { background: #fff2; color: #fff; box-shadow: none; }
 
 /* あそぶ */
-#play { background: #fff6e0; justify-content: flex-start; }
-#stage { position: relative; flex: none; background: #fff6e0; }
+#play { background: #fff; justify-content: flex-start; }
+#stage { position: relative; flex: none; background: #fff; }
 #stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #glc { touch-action: none; }
 #ovc { pointer-events: none; }
