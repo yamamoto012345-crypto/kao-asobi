@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+<title>かおあそび</title>
+<meta name="description" content="じぶんの かおを しゃしんに とって、つついて ひっぱって あそぼう。2〜5さいむけ" />
+<meta name="theme-color" content="#ffb703" />
+<link rel="manifest" href="manifest.json" />
+<link rel="icon" href="icons/icon.svg" type="image/svg+xml" />
+<link rel="apple-touch-icon" href="icons/icon.svg" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+
+  <!-- ホーム -->
+  <div id="home" class="screen active">
+    <div class="logo">😀</div>
+    <h1>かおあそび</h1>
+    <p class="sub">じぶんの かおを つついて<br>ひっぱって あそぼう</p>
+    <button id="btnCam" type="button" class="main">📷 しゃしんを とる</button>
+    <button id="btnPick" type="button" class="sec">🖼 しゃしんを えらぶ</button>
+    <button id="btnResume" type="button" class="sec" hidden><img id="thumb" alt="" /> つづきから</button>
+    <p class="note">しゃしんは この たんまつの なかだけで つかいます。<br>インターネットには おくりません。</p>
+    <button id="gearHome" type="button" class="gear" aria-label="せってい">⚙</button>
+  </div>
+
+  <input type="file" id="file" accept="image/*" hidden />
+
+  <!-- さつえい -->
+  <div id="cam" class="screen">
+    <div class="camBox">
+      <video id="video" playsinline muted></video>
+      <div class="oval"></div>
+    </div>
+    <p id="camMsg"></p>
+    <div class="camBtns">
+      <button id="camBack" type="button" class="round" aria-label="もどる">←</button>
+      <button id="shutter" type="button" aria-label="さつえい"></button>
+      <button id="camFlip" type="button" class="round" aria-label="カメラをかえる">🔄</button>
+    </div>
+    <button id="camPick" type="button" class="sec small">🖼 しゃしんを えらぶ</button>
+  </div>
+
+  <!-- あそぶ -->
+  <div id="play" class="screen">
+    <div id="stage">
+      <canvas id="glc"></canvas>
+      <canvas id="ovc"></canvas>
+      <button id="back" type="button" class="top tl" aria-label="もどる">←</button>
+      <button id="save" type="button" class="top tr2" aria-label="ほぞん">💾</button>
+      <button id="gearPlay" type="button" class="top tr" aria-label="せってい">⚙</button>
+      <div id="sleep" hidden>
+        <div class="zz">💤</div>
+        <div class="msg">ぐっすり おやすみ…<br>すこし やすもうね</div>
+        <button id="wake" type="button" disabled>おきる</button>
+      </div>
+    </div>
+    <div id="bar">
+      <div class="grp tools">
+        <button type="button" class="tool on" data-tool="pull"><span>👆</span>つまむ</button>
+        <button type="button" class="tool" data-tool="bulge"><span>🎈</span>ふくらむ</button>
+        <button type="button" class="tool" data-tool="pinch"><span>🤏</span>ぎゅー</button>
+        <button type="button" class="tool" data-tool="swirl"><span>🌀</span>ぐるぐる</button>
+      </div>
+      <div class="grp acts">
+        <button type="button" class="act" id="actMush"><span>🍄</span>おおきく</button>
+        <button type="button" class="act" id="actStar"><span>⭐</span>きらきら</button>
+        <button type="button" class="act" id="actBaa"><span>🙈</span>ばあ</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- せってい -->
+  <div id="settings" hidden>
+    <div class="panel">
+      <h2>せってい</h2>
+      <label class="row"><input type="checkbox" id="optSleep" /> おやすみ きのう（3ぷんで ねむる）</label>
+      <label class="row"><input type="checkbox" id="optSound" /> おと</label>
+      <button id="delPhoto" type="button" class="sec small">🗑 ほぞんした しゃしんを けす</button>
+      <button id="closeSet" type="button" class="main small">とじる</button>
+    </div>
+  </div>
+
+  <div id="toast"></div>
+  <div id="flash"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>

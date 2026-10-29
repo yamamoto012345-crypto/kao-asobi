@@ -1,0 +1,26 @@
+{
+  "name": "かおあそび",
+  "short_name": "かおあそび",
+  "description": "じぶんの かおを しゃしんに とって、つついて ひっぱって あそぼう。2〜5さいむけ",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#fff6e0",
+  "theme_color": "#ffb703",
+  "lang": "ja",
+  "icons": [
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

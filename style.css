@@ -1,0 +1,89 @@
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; height: 100%; overflow: hidden; background: #fff6e0; color: #5a3b00;
+  font-family: "Hiragino Maru Gothic ProN", "Yu Gothic UI", "Meiryo", sans-serif;
+  -webkit-user-select: none; user-select: none; touch-action: none; overscroll-behavior: none; }
+button { font: inherit; color: inherit; border: 0; cursor: pointer; }
+[hidden] { display: none !important; }
+
+.screen { position: fixed; inset: 0; display: none; flex-direction: column; align-items: center; justify-content: center;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left); }
+.screen.active { display: flex; }
+
+/* ホーム */
+#home { gap: 14px; text-align: center; background: linear-gradient(#fff6e0, #ffe3a3); }
+.logo { font-size: 84px; line-height: 1; animation: bob 2.4s ease-in-out infinite; }
+@keyframes bob { 50% { transform: translateY(-8px) rotate(4deg); } }
+h1 { margin: 0; font-size: 44px; letter-spacing: .06em; color: #e76f00; }
+.sub { margin: 0 0 6px; font-size: 18px; line-height: 1.5; }
+.main { background: #ff8c1a; color: #fff; font-size: 26px; font-weight: bold; padding: 18px 34px; border-radius: 40px;
+  box-shadow: 0 6px 0 #c76400; }
+.main:active { transform: translateY(4px); box-shadow: 0 2px 0 #c76400; }
+.sec { background: #fff; font-size: 20px; padding: 12px 26px; border-radius: 32px; box-shadow: 0 4px 0 #e2c98a;
+  display: inline-flex; align-items: center; gap: 10px; }
+.sec:active { transform: translateY(3px); box-shadow: 0 1px 0 #e2c98a; }
+.small { font-size: 16px; padding: 10px 20px; }
+#thumb { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; }
+.note { margin: 10px 0 0; font-size: 12px; line-height: 1.6; opacity: .7; }
+.gear { position: absolute; right: 14px; top: calc(14px + env(safe-area-inset-top)); width: 44px; height: 44px;
+  border-radius: 50%; background: #fff8; font-size: 22px; }
+
+/* さつえい */
+#cam { background: #2b2118; gap: 12px; color: #fff; }
+.camBox { position: relative; width: min(92vw, 62vh); aspect-ratio: 1; border-radius: 24px; overflow: hidden; background: #000; }
+#video { width: 100%; height: 100%; object-fit: cover; }
+#video.mirror { transform: scaleX(-1); }
+.oval { position: absolute; left: 22%; top: 12%; width: 56%; height: 76%; border: 4px dashed #fff9; border-radius: 50%; pointer-events: none; }
+#camMsg { min-height: 20px; margin: 0; font-size: 14px; text-align: center; padding: 0 20px; color: #ffd9a0; }
+.camBtns { display: flex; align-items: center; gap: 34px; }
+.round { width: 56px; height: 56px; border-radius: 50%; background: #fff3; color: #fff; font-size: 24px; }
+#shutter { width: 84px; height: 84px; border-radius: 50%; background: #fff; border: 8px solid #ff8c1a; box-shadow: 0 0 0 4px #fff6; }
+#shutter:active { transform: scale(.92); }
+#cam .sec { background: #fff2; color: #fff; box-shadow: none; }
+
+/* あそぶ */
+#play { background: #fff6e0; justify-content: flex-start; }
+#stage { position: relative; flex: none; background: #fff6e0; }
+#stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+#glc { touch-action: none; }
+#ovc { pointer-events: none; }
+.top { position: absolute; top: 8px; width: 44px; height: 44px; border-radius: 50%; background: #fffc; font-size: 22px;
+  box-shadow: 0 2px 6px #0003; }
+.tl { left: 8px; } .tr { right: 8px; } .tr2 { right: 60px; }
+#bar { flex: 1; width: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; gap: 10px; padding: 8px 8px 12px; }
+.grp { display: flex; gap: 8px; justify-content: center; width: 100%; }
+.tool, .act { flex: 1; max-width: 96px; min-height: 64px; border-radius: 18px; background: #fff; font-size: 13px; font-weight: bold;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; box-shadow: 0 4px 0 #e2c98a; }
+.tool span, .act span { font-size: 28px; line-height: 1; }
+.tool.on { background: #ffd166; box-shadow: 0 4px 0 #d9a21b; outline: 3px solid #ff8c1a; }
+.act { background: #ffe9f0; box-shadow: 0 4px 0 #e6a9bf; }
+.act.on { background: #ffc2d8; outline: 3px solid #ff5c8a; }
+.tool:active, .act:active { transform: translateY(3px); }
+
+@media (orientation: landscape) and (min-aspect-ratio: 13/10) {
+  #play { flex-direction: row; justify-content: center; }
+  #bar { flex: none; width: 200px; height: 100%; }
+  .grp { flex-wrap: wrap; width: 184px; }
+  .tool, .act { flex: 0 0 calc(50% - 4px); max-width: none; }
+}
+
+/* おやすみ */
+#sleep { position: absolute; inset: 0; background: #1b2145d0; color: #fff; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 12px; text-align: center; z-index: 5; }
+#sleep .zz { font-size: 72px; animation: bob 2s ease-in-out infinite; }
+#sleep .msg { font-size: 20px; line-height: 1.6; }
+#wake { background: #ffd166; color: #5a3b00; font-size: 20px; font-weight: bold; padding: 12px 30px; border-radius: 30px; }
+#wake:disabled { opacity: .5; }
+
+/* せってい */
+#settings { position: fixed; inset: 0; background: #0006; display: flex; align-items: center; justify-content: center; z-index: 20; }
+.panel { background: #fff; border-radius: 24px; padding: 22px 24px; width: min(88vw, 360px); display: flex; flex-direction: column; gap: 14px; }
+.panel h2 { margin: 0; font-size: 22px; }
+.row { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.row input { width: 22px; height: 22px; }
+
+#toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: #333d; color: #fff; padding: 10px 18px;
+  border-radius: 20px; font-size: 14px; opacity: 0; transition: opacity .3s; pointer-events: none; z-index: 30; }
+#toast.show { opacity: 1; }
+#flash { position: fixed; inset: 0; background: #fff; opacity: 0; pointer-events: none; z-index: 25; }
+#flash.go { animation: flash .35s ease-out; }
+@keyframes flash { 0% { opacity: .9; } 100% { opacity: 0; } }
